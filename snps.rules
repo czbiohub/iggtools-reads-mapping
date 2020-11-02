@@ -1,0 +1,157 @@
+
+rule _genomes:
+    input:
+        [PROJ_DIR + "/genome_under_investigation.fna", PROJ_DIR + "/uhgg_rep.fna"]
+
+
+rule download_genome_to_simulate:
+    input:
+        sim = PROJ_DIR + "/genome_under_investigation",
+        rep = PROJ_DIR + "/uhgg_rep",
+    output:
+        sim = PROJ_DIR + "/genome_under_investigation.fna",
+        rep = PROJ_DIR + "/uhgg_rep.fna",
+    shell:
+        """
+        genome_name=`cat {input.sim}`
+        aws s3 cp s3://microbiome-igg/2.0/cleaned_imports/{config[species_id]}/${{genome_name}}/${{genome_name}}.fna.lz4 - | lz4 -dc > {output.sim}
+
+        genome_name=`cat {input.rep}`
+        aws s3 cp s3://microbiome-igg/2.0/cleaned_imports/{config[species_id]}/${{genome_name}}/${{genome_name}}.fna.lz4 - | lz4 -dc > {output.rep}
+        """
+
+
+rule _prepare:
+    input:
+        PROJ_DIR + "/sim_rc.tsv"
+
+
+rule compute_sim_rc:
+    input:
+        PROJ_DIR + "/genome_under_investigation.fna"
+    output:
+        PROJ_DIR + "/sim_rc.tsv"
+    run:
+        with open(output[0], "w") as stream:
+            genome_length = 0
+            for record in SeqIO.parse(input[0], "fasta"):
+                genome_length += len(record.seq)
+            for coverage in SIM_COV_LIST:
+                read_counts = ceil(genome_length * coverage / config["read_length"] / 2)
+                RC_DICT[str(coverage)] = read_counts
+                stream.write("\t".join([str(coverage), str(read_counts)]) + "\n")
+
+
+rule simulate_reads:
+    input:
+        PROJ_DIR + "/genome_under_investigation.fna"
+    output:
+        r1 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "_1.fastq",
+        r2 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "_2.fastq",
+    params:
+        name = PROJ_DIR + "/1_art/cov_" + config["sim_cov"],
+        r1 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "1.fq",
+        r2 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "2.fq",
+    shell:
+        """
+        art_illumina -ss HS25 -i {input} -l {config[read_length]} -f {config[sim_cov]} -p \
+            -m {config[frag_length]} -s {config[frag_std]} -sp -sam -o {params.name}
+        mv {params.r1} {output.r1}
+        mv {params.r2} {output.r2}
+        """
+
+
+rule trimmomatic_reads:
+    input:
+        r1 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "_1.fastq",
+        r2 = PROJ_DIR + "/1_art/cov_" + config["sim_cov"] + "_2.fastq",
+    output:
+        r1 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_paired_1.fastq",
+        r2 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_paired_2.fastq",
+    params:
+        r1 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_unpaired_1.fastq",
+        r2 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_unpaired_2.fastq",
+    shell:
+        """
+        trimmomatic PE -threads {config[threads]} -phred33 \
+            {input.r1} {input.r2} {output.r1} {params.r1} {output.r2} {params.r2} \
+            LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
+        """
+
+
+rule downsample_reads:
+    input:
+        r1 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_paired_1.fastq",
+        r2 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_paired_2.fastq",
+        rc = PROJ_DIR + "/sim_rc.tsv"
+    output:
+        r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq",
+        r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq",
+    params:
+        rc = lambda wildcards: RC_DICT[wildcards.sim_cov]
+    shell:
+        """
+        seqtk sample -s100 {input.r1} {params.rc} > {output.r1}
+        seqtk sample -s100 {input.r2} {params.rc} > {output.r2}
+        """
+
+
+rule _reads:
+    input:
+        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq", sim_cov=SIM_COV_LIST)
+
+
+rule _dbs:
+    input:
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO)
+
+
+rule build_bowtie2_dbs:
+    input:
+        PROJ_DIR + "/4_midas/{bt2_combo}/db/genomes.tsv"
+    output:
+        PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species"
+    params:
+        species_ids = PROJ_DIR + "/4_midas/{bt2_combo}/db/species_ids",
+        midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db"
+    threads:
+        config["threads"]
+    shell:
+        """
+        tail -n +2 {input} | awk '{{print $2}}' > {params.species_ids}
+
+        python -m iggtools build_bowtie2_indexes \
+            --midas_iggdb {params.midas_db_dir} --num_cores {threads} \
+            --bt2_indexes_name repgenomes --species_list {params.species_ids} \
+            --bt2_indexes_dir {params.midas_db_dir}
+        """
+
+
+rule _snps:
+    input:
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)
+
+
+rule run_snps:
+    input:
+        species = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
+        r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq",
+        r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq"
+    output:
+        PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4"
+    params:
+        sample_name = "art_{bt2_combo}_{sim_cov}X",
+        midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
+        midas_out_dir = PROJ_DIR + "/4_midas/{bt2_combo}/out",
+    threads:
+        config["threads"]
+    shell:
+        """
+        python -m iggtools midas_run_snps --sample {params.sample_name} \
+            -1 {input.r1} -2 {input.r2} --midas_iggdb {params.midas_db_dir} \
+            --prebuilt_bowtie2_indexes {params.midas_db_dir}/repgenomes \
+            --prebuilt_bowtie2_species {input.species} \
+            --marker_depth=-1 --num_cores {threads} \
+            {params.midas_out_dir} &> {params.midas_out_dir}/{params.sample_name}_run_snps.log
+        """

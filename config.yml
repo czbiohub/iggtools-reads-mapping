@@ -1,0 +1,17 @@
+admins: chunyu.zhao@czbiohub.org
+
+
+species_id: 100001
+base_dir: /mnt/chunyu/20201030_species_w_isolates
+lib_dir: /mnt/chunyu/snps_eval
+
+bt2_combo_fp: bt2_combo.tsv
+
+threads: 8
+
+
+## art
+sim_cov: "50"
+read_length: 125
+frag_length: 400
+frag_std: 40
