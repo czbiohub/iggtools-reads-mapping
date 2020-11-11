@@ -5,72 +5,13 @@ args <- commandArgs(trailingOnly = TRUE)
 
 
 library(tidyverse)
-library(docstring)
-library(readr)
-library(stringr)
-library(reshape2)
-library(readxl)
 library(magrittr)
-library(forcats)
-library(data.table)
-
-library(ape)
-library(vegan)
-library(seqinr)
-library("Biostrings")
-library(DescTools)
-library(data.table)
-library(assertthat)
-library(ggsci)
 
 
-library(foreach)
-library(doParallel)
-
-
-
-pileup_to_major <- function(pileup_fp, min_allele_depth=2) {
-  #' Read in MIDAS's pileup result and generate the major alleles for each covered sites
-  #' min_allele_depth: define callable alleles as allele being covered by at least 2 reads
-  
-  if (! file.exists(pileup_fp)) {
-    system(paste("lz4 -d -c", paste(pileup_fp, ".lz4", sep=""), " > ", pileup_fp, ep="")) 
-  }
-  
-  pile.long <- read_delim(pileup_fp, delim = "\t", col_types = cols()) %>% gather(allele, counts, count_a:count_t) %>% filter(counts >= min_allele_depth)
-  
-  sites <- pile.long %>% group_by(ref_id, ref_pos) %>% dplyr::count() %>% ungroup() %>% dplyr::rename(allele_counts = n)
-  sites %>% dplyr::count(allele_counts)
-  
-  
-  major <- pile.long %>% group_by(ref_id, ref_pos) %>% filter(counts == max(counts))
-  
-  tags <- major %>% dplyr::count() %>% ungroup() %>% dplyr::rename(max_counts = n) %>% 
-    mutate(site_type = ifelse(max_counts == 2, "undetm", "detm")) # <-- site_type: tied max allele counts
-  tags %>% dplyr::count(max_counts, site_type)
-  
-  
-  
-  ## randomly assign allele for undetermined sites
-  major %<>% filter(row_number() == 1) %>% ungroup() %>% arrange(ref_id, ref_pos) %>% mutate(allele = toupper(sub("count_", "", allele)))
-  
-  
-  major %<>% left_join(sites, by=c("ref_id", "ref_pos"))
-  stopifnot(nrow(filter(major, is.na(allele_counts))) == 0)
-  
-  
-  major %<>% left_join(tags %>% select(-max_counts), by=c("ref_id", "ref_pos"))
-  stopifnot(nrow(filter(major, is.na(site_type))) == 0)
-  
-  return(major)    
-}
-
-
-
-true_sites_from_aligned <- function(aligned_sites_tp) {
+true_sites_from_aligned <- function(aligned_sites_fp) {
   ## Compute true_sites from aligned_sites
   
-  aligned_sites <- read_delim(aligned_sites_tp, delim = "\t", col_types = cols())
+  aligned_sites <- read_delim(aligned_sites_fp, delim = "\t", col_types = cols())
   
   ## ref sites that aligned to more than one qry sites. haven't looked into the reason for this.
   dupsites <- aligned_sites %>% group_by(refid, pos1) %>% filter(n() > 1) %>% ungroup() %>% select(refid, pos1) %>% unique()
@@ -86,7 +27,43 @@ true_sites_from_aligned <- function(aligned_sites_tp) {
 
 
 
+pileup_to_major <- function(pileup_fp, min_allele_depth=2) {
+  #' Read in MIDAS's pileup result and generate the major alleles for each covered sites
+  #' callable allele: allele being covered by at least min_allele_depth reads
+  
+  if (! file.exists(pileup_fp)) {
+    system(paste("lz4 -d -c", paste(pileup_fp, ".lz4", sep=""), " > ", pileup_fp, ep="")) 
+  }
+  
+  
+  ## Ignore alleles with less than min_allele_depth (2 reads)
+  pile.long <- read_delim(pileup_fp, delim = "\t", col_types = cols()) %>% 
+    gather(allele, counts, count_a:count_t) %>% filter(counts >= min_allele_depth)
+  
+  ## Compute number_of_allels per genomic site after the previous filter
+  sites <- pile.long %>% group_by(ref_id, ref_pos) %>% dplyr::count() %>% ungroup() %>% dplyr::rename(allele_counts = n)
+  sites %>% dplyr::count(allele_counts)
+  
+  
+  major <- pile.long %>% group_by(ref_id, ref_pos) %>% filter(counts == max(counts)) %>% filter(n() == 1) %>% ungroup() %>%
+    mutate(allele = toupper(sub("count_", "", allele)))
+  
+  
+  major %<>% left_join(sites, by=c("ref_id", "ref_pos"))
+  stopifnot(nrow(filter(major, is.na(allele_counts))) == 0)
+  
+  return(major)    
+}
+
+
+
+specify_decimal <- function(x, k) as.numeric(trimws(format(round(x, k), nsmall=k)))
+
+
+
 gen_maj_per_simcov <- function(sim_cov, bt2_levels, cal_maj_fp, stats_fp, min_allele_depth=2) {
+  
+  site_stats <- data.frame(bt2_db = bt2_levels)
   
   ######################################## pileup => maj.long
   maj_list <- list()
@@ -95,45 +72,103 @@ gen_maj_per_simcov <- function(sim_cov, bt2_levels, cal_maj_fp, stats_fp, min_al
     pileup_fp <- file.path(datadir, "4_midas", bt2_db, "out", sample_name, "snps", paste(species_under_investigation, ".snps.tsv", sep=""))
     maj_list[[as.character(bt2_db)]] <- pileup_to_major(pileup_fp, min_allele_depth)
   }
-  
-  maj_long <- bind_rows(maj_list, .id = "bt2_db") %>%
-    select(bt2_db, everything()) %>% filter(site_type == "detm") # <-- no longer to compute the site_type inside pileup_to_major() <= TODO
+  maj_long <- bind_rows(maj_list, .id = "bt2_db") %>% select(bt2_db, everything())
   
   
-  site_stats <- maj_long %>% dplyr::count(bt2_db, site_type) %>% spread(bt2_db, n, fill = 0)
+  ## How many sites are genotyped?
+  cs <- maj_long %>% group_by(bt2_db) %>% dplyr::count() %>% ungroup() %>% dplyr::rename(total_genotyped_sites = n)
+  if (nrow(cs) > 0) {
+    site_stats <- left_join(site_stats, cs, by=c("bt2_db"))
+  }
   
   
-  #### WHEN major_allele != altallele, could be two possibilities: (1) true_sites were wrong (2) pileup errors
-  dis_sites <- left_join(maj_long, true_sites, by=c("ref_id" = "refid", "ref_pos" = "pos1", "ref_allele" = "refallele")) %>% filter(allele != altallele)
-  dis_sites_types <- dis_sites %>% dplyr::count(sitetype) %>% mutate(sitetype = paste("disagree_", sitetype, sep="")) %>% spread(sitetype, n)
-  if (nrow(dis_sites_types) == 0 ) {
-    dis_sites_types <- data.frame(disagree_ref = 0, disagree_snp = 0)
+  # How many genotyped sites are not covered by the true_sites? [could from non-uniquely aligned regions] (repeats)
+  maj_long %<>% left_join(true_sites, by=c("ref_id" = "refid", "ref_pos" = "pos1", "ref_allele" = "refallele"))
+  cs <- maj_long %>% filter(is.na(sitetype)) %>% group_by(bt2_db) %>% summarise(sites_outside = n()) 
+  if (nrow(cs) > 0) {
+    site_stats <- left_join(site_stats, cs, by=c("bt2_db"))
+  }
+  
+  maj_long %<>% filter(!is.na(sitetype))
+  
+  
+  ## Among all the genotyped sites overlapped with true_sites, how many are not accurate?
+    #### For `ref` sites, major_allele == refallele == altallele; For `snp` sites, major_allele == altallele
+    #### Therefore, we use major_allele != altallele 
+    #### Two possibilities: (1) true_sites were wrong (2) pileup errors
+  incorrect_sites <- maj_long %>% filter(allele != altallele)
+  cs <- incorrect_sites %>% dplyr::count(bt2_db, sitetype) %>% mutate(sitetype = paste("incorrect_sites_", sitetype, sep="")) %>% spread(sitetype, n, fill = 0)
+  if (nrow(cs) > 0) {
+    site_stats <- left_join(site_stats, cs, by=c("bt2_db"))
+  }
+  
+  incorrect_sites %<>% group_by(ref_id, ref_pos, qryid, pos2) %>% summarise(num_bt2dbs = n()) %>% ungroup()
+  
+  
+  ## For some sites that was disagreed by one or more bt2 but not all, we discard that sites for downstream analysis
+  maj_long <- left_join(maj_long, incorrect_sites, by=c("ref_id", "ref_pos", "qryid", "pos2"))
+  discard_sites <- maj_long  %>% filter(!is.na(num_bt2dbs)) 
+  cs <- discard_sites %>% dplyr::count(bt2_db, sitetype) %>% mutate(sitetype = paste("discard_sites_", sitetype, sep="")) %>% spread(sitetype, n, fill = 0)
+  if (nrow(cs) > 0) {
+    site_stats <- left_join(site_stats, cs, by=c("bt2_db"))
+  }
+  
+  
+  tmpdir <- file.path(dirname(cal_maj_fp))
+  if (nrow(discard_sites)) {
+    discard_sites %>% write.table(file.path(tmpdir, paste("discard_sites_", sim_cov, "X.tsv", sep="")), sep="\t", quote = F, row.names = F)
+  }
+  
+  
+  maj_long %<>% filter(is.na(num_bt2dbs)) %>% select(-num_bt2dbs)
+  stopifnot(nrow(maj_long %>% filter(allele != altallele)) == 0)
+  
+  ## Did we genotype the correct allele?
+  n1 <- maj_long %>% filter(ref_allele == allele & sitetype != "ref") %>% nrow()
+  if (n1 > 0) {
+    maj_long %>% filter(ref_allele == allele & sitetype != "ref") %>%
+      write.table(file.path(dirname(cal_maj_fp), paste("incor_genotyped_ref_sites_", sim_cov, "X.tsv", sep="")), sep="\t", quote = F, row.names = F)
+    
+    maj_long %<>% filter(ref_allele == allele & sitetype == "ref")
+  }
+  n2 <- maj_long %>% filter(ref_allele != allele & altallele == allele & sitetype != "snp") %>% nrow()
+  if (n2 > 0) {
+    maj_long %>% filter(ref_allele != allele & altallele == allele & sitetype != "snp") %>% 
+      write.table(file.path(dirname(cal_maj_fp), paste("incor_genotyped_snp_sites_", sim_cov, "X.tsv", sep="")), sep="\t", quote = F, row.names = F)
+    
+    maj_long %<>% filter(ref_allele != allele & altallele == allele & sitetype == "snp") 
+  } 
+  
+  
+  cs <- maj_long %>% group_by(bt2_db, sitetype) %>% dplyr::count() %>% spread(sitetype, n, fill=0)
+  if (nrow(cs) > 0) {
+    site_stats <- left_join(site_stats, cs, by=c("bt2_db"))
   }
   
   ######################################## maj.long => maj.wide: potentially this can be ported into MIDAS
-  maj_wide <- maj_long %>% mutate(pid = paste(ref_id, ref_pos, ref_allele, sep="|")) %>% select(bt2_db, pid, ref_id, ref_pos, ref_allele, counts) %>% spread(bt2_db, counts, fill = 0)
+  ## AMONG all the detected true sites by at least one bt2db, how many are accurate?
+  maj_wide <- maj_long %>% select(bt2_db, ref_id, ref_pos, ref_allele, counts) %>% spread(bt2_db, counts, fill = 0)
   
-  ## IGNORE: reported sites that are not **in** the true sites set, could from non-uniquely aligned regions (repeats).
-  sites_ignored <- nrow(maj_wide %>% left_join(true_sites, by=c("ref_id"="refid", "ref_pos" = "pos1", "ref_allele" = "refallele")) %>% filter(is.na(sitetype)))
+  if (FALSE) {
+    add_freq <- maj_long %>% left_join(maj_wide %>% select(ref_id, ref_pos) %>% mutate(pass = TRUE), by=c("ref_id", "ref_pos")) %>% filter(pass == TRUE) %>% 
+      mutate(allele_frequency = specify_decimal(counts/depth,3)) %>%
+      select(bt2_db, ref_id, ref_pos, ref_allele, allele_frequency) %>%
+      mutate(bt2_db = paste("allele_freq_", bt2_db, sep="")) %>%
+      spread(bt2_db, allele_frequency, fill = 0)
+    stopifnot(nrow(maj_wide) == nrow(add_freq))
+  }
   
-  ## AMONG all the detected true sites by at least one bt2db
-  maj_wide <- left_join(true_sites, maj_wide, by=c("refid"="ref_id", "pos1" = "ref_pos", "refallele" = "ref_allele"))
-  
-  ## Detection Power <- snp detection power to start with is 50% ... 
-  site_stats <- cbind(site_stats, maj_wide %>% filter(!is.na(pid)) %>% dplyr::count(sitetype) %>% spread(sitetype, n) %>% mutate(sites_outside = as.numeric(sites_ignored))) %>% 
-    mutate(sites_disagree = as.numeric(dis_sites %>% select(ref_id, ref_pos) %>% unique() %>% nrow()))
-  site_stats <- cbind(site_stats, dis_sites_types)
-  
-  maj_wide %<>% filter(!is.na(pid)) %>% select(-pid)
-  
-  #### WHAT TO DO with those disagreed_sites?
-  discard_sites <- left_join(maj_wide, dis_sites %>% group_by(ref_id, ref_pos) %>% summarise(num_bt2dbs = n()) %>% ungroup(), by=c("refid" = "ref_id", "pos1" = "ref_pos")) %>% filter(! is.na(num_bt2dbs))
-  
-  site_stats$sites_discard <- discard_sites %>% select(refid, pos1) %>% unique() %>% nrow()
-  
-  maj_wide <- left_join(maj_wide, dis_sites %>% group_by(ref_id, ref_pos) %>% summarise(num_bt2dbs = n()) %>% ungroup(), by=c("refid" = "ref_id", "pos1" = "ref_pos")) %>% filter( is.na(num_bt2dbs)) %>% select(-num_bt2dbs)
+  add_depth <- maj_long %>% left_join(maj_wide %>% select(ref_id, ref_pos) %>% mutate(pass = TRUE), by=c("ref_id", "ref_pos")) %>% filter(pass == TRUE) %>% 
+    select(bt2_db, ref_id, ref_pos, ref_allele, depth) %>%
+    mutate(bt2_db = paste("depth_", bt2_db, sep="")) %>%
+    spread(bt2_db, depth, fill = 0)
+  stopifnot(nrow(maj_wide) == nrow(add_depth))
   
   
+  maj_wide %<>% left_join(add_depth, by=c("ref_id", "ref_pos", "ref_allele"))
+  maj_wide %<>% left_join(true_sites, by=c("ref_id"="refid", "ref_pos" = "pos1", "ref_allele" = "refallele")) %>% filter(!is.na(sitetype))
+  
+
   site_stats %>% write.table(stats_fp, sep="\t", row.names = F, quote = F)
   maj_wide %>% write.table(cal_maj_fp, sep="\t", row.names = F, quote = F)
 }
@@ -145,11 +180,19 @@ gen_maj_per_simcov <- function(sim_cov, bt2_levels, cal_maj_fp, stats_fp, min_al
 
 ####################### main functions #######################
 ## Input
-datadir <- args[1]
-species_under_investigation <- args[2]
-aligned_sites_fp <- args[3]
-sim_cov <- args[4]
-min_allele_depth = 2
+if (length(args) > 0 ) {
+  datadir <- args[1]
+  species_under_investigation <- args[2]
+  aligned_sites_fp <- args[3]
+  sim_cov <- args[4]
+  min_allele_depth = 2
+} else {
+  species_under_investigation <- 103703
+  datadir <- file.path("/Users/chunyu.zhao/Documents/20200729_snps_reads_mapping/20200917_prep_s3", species_under_investigation)
+  sim_cov <- 20
+  aligned_sites_fp <- file.path(datadir, "5_nucmer", paste(species_under_investigation, "_aligned_sites.tsv", sep=""))
+  min_allele_depth = 2
+}
 
 
 ## Output
@@ -166,102 +209,8 @@ bt2_levels <- data.frame(bt2_db = list.files(file.path(datadir, "4_midas"))) %>%
   separate(bt2_db, sep="\\.", into = c("_", "bt2_ani"), remove = F) %>% mutate(bt2_ani = as.numeric(bt2_ani)) %>% 
   mutate(bt2_db = as.factor(bt2_db)) %>% mutate(bt2_db = fct_reorder(bt2_db, bt2_ani, .desc=TRUE)) %>% .$bt2_db %>% levels()
 
-true_sites <- true_sites_from_aligned(aligned_sites_fp)
+true_sites <- true_sites_from_aligned(aligned_sites_fp) %>% filter(sitetype!= "mism")
 
 ## Compute
 gen_maj_per_simcov(sim_cov, bt2_levels, cal_maj_fp, stats_fp, min_allele_depth=2) 
-
-
-
-######################## PROTOTYPE WITH NOTES #############################
-
-maj_pass_one <- function(r_tempdir, species_outdir, species_under_investigation, bt2_levels, aligned_sites_fp, numCores=4, min_allele_depth=2) {
-  #' Accumulate useful information
-  #' Analysis flow: pileup => major_long => major_wide
-  
-  true_sites <- true_sites_from_aligned(aligned_sites_fp)
-  
-  for (sim_cov in 50:1) {
-    
-    print(paste(species_under_investigation, ":", sim_cov))
-    
-    cal_maj_fp <- file.path(r_tempdir, paste("maj.wide_", sim_cov, "X.tsv", sep=""))
-    stats_fp <- file.path(species_outdir, paste("maj.stats_", sim_cov, "X.tsv", sep=""))
-    
-    
-    maj_list <- list()
-    for (bt2_db in bt2_levels) {
-      sample_name <- paste("art_", bt2_db, "_", sim_cov, "X", sep="")
-      pileup_fp <- file.path(datadir, "4_midas", bt2_db, "out", sample_name, "snps", paste(species_under_investigation, ".snps.tsv", sep=""))
-      maj_list[[as.character(bt2_db)]] <- pileup_to_major(pileup_fp, min_allele_depth)
-    }
-    
-    
-    
-    maj_long <- bind_rows(maj_list, .id = "bt2_db") %>%
-      select(bt2_db, everything()) %>% filter(site_type == "detm") # <-- no longer to compute the site_type inside pileup_to_major() <= TODO
-    
-    
-    site_stats <- maj_long %>% dplyr::count(bt2_db, site_type) %>% spread(bt2_db, n, fill = 0)
-    
-    
-    #### WHEN major_allele != altallele, could be two possibilities: (1) true_sites were wrong (2) pileup errors
-    dis_sites <- left_join(maj_long, true_sites, by=c("ref_id" = "refid", "ref_pos" = "pos1", "ref_allele" = "refallele")) %>% filter(allele != altallele)
-    dis_sites_types <- dis_sites %>% dplyr::count(sitetype) %>% mutate(sitetype = paste("disagree_", sitetype, sep="")) %>% spread(sitetype, n)
-    
-    
-    ######################################## maj.long => maj.wide: potentially this can be ported into MIDAS
-    maj_wide <- maj_long %>% mutate(pid = paste(ref_id, ref_pos, ref_allele, sep="|")) %>% select(bt2_db, pid, ref_id, ref_pos, ref_allele, counts) %>% spread(bt2_db, counts, fill = 0)
-    
-    ## IGNORE: reported sites that are not **in** the true sites set, could from non-uniquely aligned regions (repeats).
-    sites_ignored <- nrow(maj_wide %>% left_join(true_sites, by=c("ref_id"="refid", "ref_pos" = "pos1", "ref_allele" = "refallele")) %>% filter(is.na(sitetype)))
-    
-    ## AMONG all the detected true sites by at least one bt2db
-    maj_wide <- left_join(true_sites, maj_wide, by=c("refid"="ref_id", "pos1" = "ref_pos", "refallele" = "ref_allele"))
-    
-    ## Detection Power <- snp detection power to start with is 50% ... 
-    site_stats <- cbind(site_stats, maj_wide %>% filter(!is.na(pid)) %>% dplyr::count(sitetype) %>% spread(sitetype, n) %>% mutate(sites_outside = as.numeric(sites_ignored))) %>% 
-      mutate(sites_disagree = as.numeric(dis_sites %>% select(ref_id, ref_pos) %>% unique() %>% nrow()))
-    site_stats <- cbind(site_stats, dis_sites_types)
-    
-    maj_wide %<>% filter(!is.na(pid)) %>% select(-pid)
-    
-    #### WHAT TO DO with those disagreed_sites?
-    discard_sites <- left_join(maj_wide, dis_sites %>% group_by(ref_id, ref_pos) %>% summarise(num_bt2dbs = n()) %>% ungroup(), by=c("refid" = "ref_id", "pos1" = "ref_pos")) %>% filter(! is.na(num_bt2dbs))
-    
-    site_stats$sites_discard <- discard_sites %>% select(refid, pos1) %>% unique() %>% nrow()
-    
-    maj_wide <- left_join(maj_wide, dis_sites %>% group_by(ref_id, ref_pos) %>% summarise(num_bt2dbs = n()) %>% ungroup(), by=c("refid" = "ref_id", "pos1" = "ref_pos")) %>% filter( is.na(num_bt2dbs)) %>% select(-num_bt2dbs)
-    
-    
-    site_stats %>% write.table(stats_fp, sep="\t", row.names = F, quote = F)
-    maj_wide %>% write.table(cal_maj_fp, sep="\t", row.names = F, quote = F)
-  }
-}
-
-
-
-maj_pass_one_parallel <- function(r_tempdir, species_outdir, species_under_investigation, bt2_levels, aligned_sites_fp, numCores=16, min_allele_depth=2) {
-  # 20201022: this doesn't work on EC2: ssh 
-  #' Accumulate useful information
-  #' Analysis flow: pileup => major_long => major_wide
-  
-  ##https://nceas.github.io/oss-lessons/parallel-computing-in-r/parallel-computing-in-r.html
-  ##https://privefl.github.io/blog/a-guide-to-parallelism-in-r/
-  
-  cl <- parallel::makeCluster(numCores)
-  registerDoParallel(numCores)
-  print(paste(species_under_investigation, "start"))
-  
-  foreach(sim_cov=50:1) %dopar% {
-    true_sites <- true_sites_from_aligned(aligned_sites_fp)
-    print(paste(species_under_investigation, "--", sim_cov))
-    cal_maj_fp <- file.path(r_tempdir, paste("maj.wide_", sim_cov, "X.tsv", sep=""))
-    stats_fp <- file.path(species_outdir, paste("maj.stats_", sim_cov, "X.tsv", sep=""))
-    gen_maj_per_simcov(sim_cov, bt2_levels, cal_maj_fp, stats_fp) 
-  }
-  
-  parallel::stopCluster(cl)
-}
-
 
