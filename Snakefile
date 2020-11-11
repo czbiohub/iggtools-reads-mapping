@@ -27,9 +27,8 @@ if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
             line = line.rstrip().split('\t')
             RC_DICT[line[0]] = int(line[1])
 
-
-include: "snps.rules"
-include: "nucmer.rules"
+#include: "snps.rules"
+#include: "nucmer.rules"
 
 
 rule _tsv:
@@ -38,6 +37,11 @@ rule _tsv:
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_presence.tsv",
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abundance.tsv",
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abuncorr.tsv",
+
+
+rule _ana:
+    input:
+        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_allelefreq_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
 
 
 rule _major:
@@ -60,6 +64,25 @@ rule major_pass_one:
         """
         Rscript {params.maj_pass_one_R} {PROJ_DIR} {config[species_id]} {input.aligned_sites} {wildcards.sim_cov}
         """
+
+
+rule analysis_pass_one:
+    input:
+        PROJ_DIR + "/6_rtemp/" + "maj.wide_{sim_cov}X.tsv"
+    output:
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_abundance_{sim_cov}X.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_abuncorr_{sim_cov}X.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_presence_{sim_cov}X.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_allelefreq_{sim_cov}X.tsv"
+    params:
+        maj_pass_one_R = LIB_DIR + "/maj_ana_one.R",
+    threads:
+        2
+    shell:
+        """
+        Rscript {params.maj_pass_one_R} {PROJ_DIR} {config[species_id]} {wildcards.sim_cov}
+        """
+
 
 
 rule major_pass_two:
