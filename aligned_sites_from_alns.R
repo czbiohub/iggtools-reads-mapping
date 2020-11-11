@@ -5,7 +5,6 @@ args <- commandArgs(trailingOnly = TRUE)
 
 
 library(tidyverse)
-library(docstring)
 library(readr)
 library(stringr)
 library(reshape2)
