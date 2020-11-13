@@ -211,6 +211,7 @@ bt2_levels <- data.frame(bt2_db = list.files(file.path(datadir, "4_midas"))) %>%
 
 true_sites <- true_sites_from_aligned(aligned_sites_fp) %>% filter(sitetype!= "mism")
 
+
 ## Compute
 gen_maj_per_simcov(sim_cov, bt2_levels, cal_maj_fp, stats_fp, min_allele_depth=2) 
 

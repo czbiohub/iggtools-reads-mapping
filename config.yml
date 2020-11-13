@@ -7,7 +7,7 @@ lib_dir: /mnt/cz/iggtools-reads-mapping
 
 bt2_combo_fp: bt2_combo.tsv
 
-threads: 2
+threads: 1
 
 ## art
 sim_cov: "50"

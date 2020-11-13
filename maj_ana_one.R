@@ -38,6 +38,7 @@ gen_maj_analysis <- function(r_tempdir, r_outdir, species_under_investigation, b
   ## WHAT TO DO with the extra_sites?
   
   
+  ################ DOUBE CHECK ME
   maj_wide %<>% filter(ani.100 > 0) #<- need to ask Katie about this one
   
   
@@ -110,16 +111,6 @@ gen_maj_analysis <- function(r_tempdir, r_outdir, species_under_investigation, b
   af_stats %>% mutate(sim_cov = sim_cov) %>% select(sim_cov, everything()) %>%
     write.table(site_af_fp, sep="\t", quote = F, row.names = F)
   
-  
-  if (FALSE) {
-    af_stats %>% spread(bin, n, fill = 0) %>%
-      gather(bin, site_counts, `5`: `11`) %>%
-      mutate(bin = as.numeric(bin)) %>%
-      ggplot(aes(x = bin, y = site_counts, color = bt2_db, group=bt2_db)) + 
-      geom_point() + geom_line() +
-      scale_y_log10() +
-      facet_wrap(~sitetype)
-  }
 }
 
 
