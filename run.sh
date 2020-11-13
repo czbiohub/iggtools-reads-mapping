@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-set -x
+#set -x
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 SPECIES_ID THREADS"
@@ -17,10 +17,11 @@ datadir=/mnt/cz/20201110_species_w_isolates/${species_id}
 
 #snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _reads
 
-#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps --rerun-incomplete
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _ana 
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv
 
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _sites --rerun-incomplete
 
 #rm -r ${datadir}/4_midas/*/out/*/temp
 #rm -r ${datadir}/4_midas/*/db/*bt2*
