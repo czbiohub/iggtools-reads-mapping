@@ -13,13 +13,13 @@ from math import ceil
 
 
 PROJ_DIR = config["base_dir"] + "/" + str(config["species_id"])
-print(PROJ_DIR)
 LIB_DIR = config["lib_dir"]
 
 with open(PROJ_DIR + "/" + config["bt2_combo_fp"]) as stream:
     BT2_COMBO = [line.rstrip() for line in stream]
 
 SIM_COV_LIST = range(1, int(config["sim_cov"]) + 1)
+
 
 RC_DICT = defaultdict(int)
 if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
@@ -29,9 +29,9 @@ if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
             RC_DICT[line[0]] = int(line[1])
 
 
+include: "reads.rules"
 include: "snps.rules"
 include: "nucmer.rules"
-
 
 rule _tsv:
     input:

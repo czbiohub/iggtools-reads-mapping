@@ -10,7 +10,7 @@ bt2_combo_fp: bt2_combo.tsv
 threads: 1
 
 ## art
-sim_cov: "50"
+sim_cov: "51"
 read_length: 125
 frag_length: 400
 frag_std: 40
