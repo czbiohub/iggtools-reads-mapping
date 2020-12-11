@@ -17,9 +17,11 @@ snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config specie
 
 snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _reads
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps --rerun-incomplete
 
-#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _bamaln
+
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv_v2
 
 #snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _sites --rerun-incomplete
 

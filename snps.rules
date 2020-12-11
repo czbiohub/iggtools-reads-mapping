@@ -1,4 +1,6 @@
 # Build Bowtie2 indexes and run MIDAS snps flow
+import pysam
+import numpy as np
 
 
 rule _dbs:
@@ -10,6 +12,11 @@ rule _snps:
     input:
         expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
             bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)
+
+
+rule _bamaln:
+    input:
+        expand(PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv", bt2_combo = BT2_COMBO, sim_cov = range(10, 21))
 
 
 rule build_bowtie2_dbs:
@@ -57,7 +64,7 @@ rule run_snps:
         """
 
 
-rule run_snps:
+rule run_snps_nofile:
     input:
         species = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
         r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq",
@@ -80,3 +87,29 @@ rule run_snps:
             --aln_mapid 0.0 --aln_mapq 0 --aln_readq 0 --aln_cov 0.0 --aln_baseq 0 \
             {params.midas_out_dir} &> {params.midas_out_dir}/{params.sample_name}_run_snps.log
         """
+
+
+rule balmaln_tsv:
+    input:
+        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4"
+    output:
+        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv"
+    threads:
+        1
+    params:
+        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/temp/snps/repgenomes.bam",
+    run:
+        outfile = output[0]
+        bamfile = params[0]
+        with open(outfile, "w") as ofile:
+          with pysam.AlignmentFile(bamfile) as infile:
+              for aln in infile:
+                  row = [aln.reference_name, aln.reference_start, aln.reference_end, aln.query_name, aln.query_alignment_start, aln.query_alignment_end, aln.is_unmapped]
+                  align_len = len(aln.query_alignment_sequence)
+                  query_len = aln.query_length
+                  readq = "{:.2f}".format(np.mean(aln.query_qualities))
+                  mapq = aln.mapping_quality
+                  mapid = "{:.2f}".format(100 * (align_len - dict(aln.tags)['NM']) / float(align_len))
+                  alncov = "{:.2f}".format(align_len / float(query_len))
+                  row = row + [readq, mapq, mapid, alncov]
+                  ofile.write("\t".join(map(str, row)) + "\n")

@@ -119,12 +119,12 @@ read_nucmer_alnfile <- function(aln_file) {
 
 read_snps <- function(snps_file) {
   showsnps <- read_delim(snps_file, delim="\t", col_names = c("pos1", "sub_ref", "sub_qry", "pos2", "buff", "dist", "frm1", "frm2", "ref", "query"))
-  
+
   ## When two genomes' ANI is 100, the following would happen.
   if (nrow(showsnps) == 0) {
     showsnps <- data.frame(matrix(ncol=10,nrow=0, dimnames=list(NULL, c("pos1", "sub_ref", "sub_qry", "pos2", "buff", "dist", "frm1", "frm2", "ref", "query"))))
   }
-  
+
   return(showsnps)
 }
 
@@ -169,13 +169,13 @@ gen_tp_from_aln <- function(curr_snps, curr_block, refgenome, qrygenome) {
   aln_df %<>% filter(subref != '.' & subqry != '.') %>% select(-one_of(c("subref", "subqry"))) %>%
     mutate(sitetype = ifelse(refallele == altallele, "ref", "mism"))
 
-  
+
   if (nrow(curr_snps) > 0) {
     curr_snps %<>% filter(sub_ref != "." & sub_qry != '.') %>% select(ref, query, pos1, pos2, sub_ref, sub_qry) %>% mutate(issnp = "yes")
     aln_df <- left_join(aln_df, curr_snps, by=c("refid" = "ref", "qryid" = "query", "pos1", "pos2", "refallele" = "sub_ref", "altallele" = "sub_qry"))
     aln_df %<>% mutate(issnp = ifelse(is.na(issnp), "no", issnp)) %>% mutate(sitetype = ifelse(issnp == "yes", "snp", sitetype)) %>% select(-issnp)
   }
-  
+
   aln_df %>% dplyr::count(sitetype)
 
   return(aln_df)
@@ -209,7 +209,8 @@ aligned_sites_from_alns <- function(datadir, species_under_investigation) {
 
   ## output files
   plot_fp <- file.path(numcer_dir, paste(species_under_investigation, ".heatmap_coords_refqry.pdf", sep=""))
-  tp_sites_fp <- file.path(numcer_dir, paste(species_under_investigation, "_aligned_sites.tsv", sep=""))
+  aligned_sites_fp <- file.path(numcer_dir, paste(species_under_investigation, "_aligned_sites.tsv", sep=""))
+
 
    ## 2020-10-29: when two genomes ANI is 100, the showsnps would be empty.
   showsnps <- read_snps(snps_file)
@@ -250,7 +251,7 @@ aligned_sites_from_alns <- function(datadir, species_under_investigation) {
     aligned_sites[[r]] <- bind_rows(chrom_aln)
   }
 
-  write.table(bind_rows(aligned_sites), tp_sites_fp, sep="\t", quote=F, row.names = F)
+  write.table(bind_rows(aligned_sites), aligned_sites_fp, sep="\t", quote=F, row.names = F)
 }
 
 
