@@ -18,7 +18,7 @@ LIB_DIR = config["lib_dir"]
 with open(PROJ_DIR + "/" + config["bt2_combo_fp"]) as stream:
     BT2_COMBO = [line.rstrip() for line in stream]
 
-SIM_COV_LIST = range(1, int(config["sim_cov"]) + 1)
+SIM_COV_LIST = range(1, int(config["sim_cov"]))
 
 
 RC_DICT = defaultdict(int)
@@ -29,15 +29,36 @@ if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
             RC_DICT[line[0]] = int(line[1])
 
 
-include: "reads.rules"
-include: "snps.rules"
-include: "nucmer.rules"
+include: "rules/reads.rules"
+include: "rules/snps.rules"
+include: "rules/nucmer.rules"
+include: "rules/summary.rules"
 
 
-rule _tsv_v2:
+rule _stats:
     input:
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_reads_summary.tsv"
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary.tsv",
+        #PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary_nofilter",
+        #PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary_nofilter",
+
+
+rule _dbs:
+    input:
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO)
+
+
+rule _snps:
+    input:
+        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST),
+        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
+
+
+rule _bamaln:
+    input:
+        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv", bt2_combo = BT2_COMBO, sim_cov = range(15, 21))
 
 
 rule _true_sites:
@@ -45,84 +66,26 @@ rule _true_sites:
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
 
 
-rule reference_sets:
+rule _sites:
     input:
         PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv"
-    output:
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
-    params:
-        R = LIB_DIR + "/aln_to_truesites.R",
-    shell:
-        "Rscript {params.R} {input} {output}"
 
 
-rule sites_summary:
+rule _aligns:
     input:
-        expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{{sim_cov}}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4", bt2_combo=BT2_COMBO),
-        true_sites = PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
-    output:
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv",
-    params:
-        R = LIB_DIR + "/pileup_to_summary.R"
-    threads:
-        2
-    shell:
-        """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]} {input.true_sites} {wildcards.sim_cov} 1
-        """
+        PROJ_DIR + "/5_nucmer/DONE-show-aligns"
 
 
-rule per_species_summary:
+rule _prepare:
     input:
-        expand(PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
-    output:
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_reads_summary.tsv"
-    params:
-        R = LIB_DIR + "/xs_cov_summary.R",
-    threads:
-        1
-    shell:
-        """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]} 1
-        """
+        PROJ_DIR + "/sim_rc.tsv"
 
 
-
-rule _tsv_v2_nf:
+rule _genomes:
     input:
-        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_sites_summary.tsv",
-        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_reads_summary.tsv"
+        [PROJ_DIR + "/genome_under_investigation.fna", PROJ_DIR + "/uhgg_rep.fna"]
 
 
-
-rule sites_summary_nf:
+rule _reads:
     input:
-        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{{sim_cov}}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4", bt2_combo=BT2_COMBO),
-        true_sites = PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
-    output:
-        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv",
-    params:
-        R = LIB_DIR + "/pileup_to_summary.R"
-    threads:
-        2
-    shell:
-        """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]} {input.true_sites} {wildcards.sim_cov} 0
-        """
-
-
-rule per_species_summary_nf:
-    input:
-        expand(PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
-    output:
-        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_sites_summary.tsv",
-        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_reads_summary.tsv"
-    params:
-        R = LIB_DIR + "/xs_cov_summary.R",
-    threads:
-        1
-    shell:
-        """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]} 0
-        """
+        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq", sim_cov=SIM_COV_LIST)

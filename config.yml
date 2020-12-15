@@ -14,3 +14,7 @@ sim_cov: "51"
 read_length: 125
 frag_length: 400
 frag_std: 40
+
+
+##
+min_allele_depth: 2
