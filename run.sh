@@ -11,17 +11,22 @@ species_id="$1"
 threads="$2"
 
 
-datadir=/mnt/cz/20201110_species_w_isolates/${species_id}
+datadir=/mnt/cz/20201214_species_w_isolates/${species_id}
 
 snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _prepare
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p _genomes
+snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _sites
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _reads
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps --rerun-incomplete
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _reads
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _bamaln
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _snps --rerun-incomplete
 
-snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv_v2
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _bamaln
+
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv_v2
+
+#snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _tsv_v2_nf
 
 #snakemake --configfile /mnt/cz/iggtools-reads-mapping/config.yml --config species_id=${species_id} -p --cores ${threads} _sites --rerun-incomplete
 

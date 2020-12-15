@@ -40,11 +40,16 @@ rule _tsv_v2:
         PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_reads_summary.tsv"
 
 
+rule _true_sites:
+    input:
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+
+
 rule reference_sets:
     input:
         PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv"
     output:
-        PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
     params:
         R = LIB_DIR + "/aln_to_truesites.R",
     shell:
@@ -60,10 +65,10 @@ rule sites_summary:
     params:
         R = LIB_DIR + "/pileup_to_summary.R"
     threads:
-        1
+        2
     shell:
         """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]} {input.true_sites} {wildcards.sim_cov}
+        Rscript {params.R} {PROJ_DIR} {config[species_id]} {input.true_sites} {wildcards.sim_cov} 1
         """
 
 
@@ -79,5 +84,45 @@ rule per_species_summary:
         1
     shell:
         """
-        Rscript {params.R} {PROJ_DIR} {config[species_id]}
+        Rscript {params.R} {PROJ_DIR} {config[species_id]} 1
+        """
+
+
+
+rule _tsv_v2_nf:
+    input:
+        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_sites_summary.tsv",
+        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_reads_summary.tsv"
+
+
+
+rule sites_summary_nf:
+    input:
+        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{{sim_cov}}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4", bt2_combo=BT2_COMBO),
+        true_sites = PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+    output:
+        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv",
+    params:
+        R = LIB_DIR + "/pileup_to_summary.R"
+    threads:
+        2
+    shell:
+        """
+        Rscript {params.R} {PROJ_DIR} {config[species_id]} {input.true_sites} {wildcards.sim_cov} 0
+        """
+
+
+rule per_species_summary_nf:
+    input:
+        expand(PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "/sites_summary_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
+    output:
+        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_sites_summary.tsv",
+        PROJ_DIR + "/6_rdata_nofilter/" + str(config["species_id"]) + "_reads_summary.tsv"
+    params:
+        R = LIB_DIR + "/xs_cov_summary.R",
+    threads:
+        1
+    shell:
+        """
+        Rscript {params.R} {PROJ_DIR} {config[species_id]} 0
         """
