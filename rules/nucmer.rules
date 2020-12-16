@@ -62,7 +62,7 @@ rule generate_aligned_sites:
         coords = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".coords",
         repgenome = PROJ_DIR + "/uhgg_rep.fna",
         qrygenome = PROJ_DIR + "/genome_under_investigation.fna",
-        PROJ_DIR + "/5_nucmer/DONE-show-aligns"
+        flag = PROJ_DIR + "/5_nucmer/DONE-show-aligns"
     output:
         sites = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv",
         pdf = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + ".heatmap_coords_refqry.pdf"

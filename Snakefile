@@ -39,8 +39,8 @@ rule _stats:
     input:
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary.tsv",
-        #PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary_nofilter",
-        #PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary_nofilter",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary_nofilter.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary_nofilter.tsv",
 
 
 rule _dbs:

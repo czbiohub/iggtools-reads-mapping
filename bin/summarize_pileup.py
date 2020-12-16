@@ -24,7 +24,6 @@ true_sites_schema = {
 }
 
 
-
 sites_stats_schema = {
     "refid": str,
     "sitetype": str,
@@ -45,7 +44,6 @@ def gen_myid(ref_id, site_type):
 
 def read_true_sites(truesites_fp):
     # Read-only global variables
-    global true_sites_dict
     true_sites_dict = defaultdict(dict)
     sites_summary_dict = defaultdict(dict)
     with InputStream(truesites_fp) as stream:

@@ -36,7 +36,7 @@ rule run_snps:
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas/{bt2_combo}/out",
     threads:
-        config["threads"]
+        4
     shell:
         """
         python -m iggtools midas_run_snps --sample {params.sample_name} \
@@ -60,7 +60,7 @@ rule run_snps_nofilter:
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out",
     threads:
-        config["threads"]
+        4
     shell:
         """
         python -m iggtools midas_run_snps --sample {params.sample_name} \
