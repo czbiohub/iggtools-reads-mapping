@@ -1,0 +1,87 @@
+
+#https://github.com/zjshi/snpMLST/blob/master/snp_mlst/snps_io/call_snps.py
+#https://github.com/zjshi/snpMLST/blob/master/snp_mlst/snps_io/gen_msa.py
+
+rule run_nucmer:
+    input:
+        sim = PROJ_DIR + "/genome_under_investigation.fna",
+        rep = PROJ_DIR + "/uhgg_rep.fna",
+    output:
+        PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".delta",
+        PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".coords",
+        PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".snps",
+        pdf = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + ".coords.hist.pdf"
+    params:
+        spid = config["species_id"],
+        spid_dir = PROJ_DIR + "/5_nucmer",
+        mincluster = 100,
+        R = LIB_DIR + "/bin/auto_min_pid_by_delta.R",
+    threads:
+        2
+    shell:
+        """
+        cd {params.spid_dir}
+        nucmer --mum -c {params.mincluster} -p {params.spid}.raw {input.rep} {input.sim}
+
+        delta-filter -q -r {params.spid}.raw.delta > {params.spid}.temp.delta
+        show-coords -r -c -l {params.spid}.temp.delta > {params.spid}.temp.coords
+
+        # filter coords by pident
+        min_pid_by_delta=`Rscript {params.R} {params.spid}.temp.coords {output.pdf}`
+
+        delta-filter -q -r -i ${{min_pid_by_delta}} {params.spid}.temp.delta > {params.spid}.delta
+
+        show-coords -r -c -l {params.spid}.delta > {params.spid}.coords
+        show-snps -C -r -T -H {params.spid}.delta > {params.spid}.snps
+        """
+
+
+rule show_aligns:
+    input:
+        delta = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".delta",
+        coords = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".coords",
+    output:
+        PROJ_DIR + "/5_nucmer/DONE-show-aligns"
+    params:
+        spid = config["species_id"],
+        spid_dir = PROJ_DIR + "/5_nucmer",
+        show_align_sh = LIB_DIR + "/bin/run_show_aligns.sh"
+    threads:
+        12
+    shell:
+        """
+        awk -F"|" '{{print $7}}' {input.coords} | sed -e 's/^ *//' | awk '{{print $1, $2}}' | grep UHGG | sort -u -k1,2 | xargs -Ixx -P {threads} bash -c "bash {params.show_align_sh} {input.delta} xx"
+
+        touch {output}
+        """
+
+
+rule generate_aligned_sites:
+    input:
+        snps = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".snps",
+        coords = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + ".coords",
+        repgenome = PROJ_DIR + "/uhgg_rep.fna",
+        qrygenome = PROJ_DIR + "/genome_under_investigation.fna",
+        flag = PROJ_DIR + "/5_nucmer/DONE-show-aligns"
+    output:
+        sites = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv",
+        pdf = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + ".heatmap_coords_refqry.pdf"
+    params:
+        R = LIB_DIR + "/bin/mummer_sites.R",
+    threads:
+        2
+    shell:
+        """
+        Rscript {params.R} {input.snp} {input.coords} {input.repgenome} {input.qrygenome} {output.sites} {output.pdf}
+        """
+
+
+rule reference_sets:
+    input:
+        PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv"
+    output:
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+    params:
+        R = LIB_DIR + "/bin/mummer_sites.R",
+    shell:
+        "Rscript {params.R} {input} {output}"

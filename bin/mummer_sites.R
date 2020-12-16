@@ -1,5 +1,6 @@
 ## Chunyu Zhao 2020-10-21
 #! /usr/bin/Rscript
+## Generate aligned sties between ref and qry from the whole genome alignments
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -21,11 +22,6 @@ library(DescTools)
 library(data.table)
 library(assertthat)
 library(ggsci)
-
-
-
-datadir <- args[1]
-species_under_investigation <- args[2]
 
 
 read_coords <- function(coordsfile) {
@@ -182,6 +178,7 @@ gen_tp_from_aln <- function(curr_snps, curr_block, refgenome, qrygenome) {
 }
 
 
+
 visualize_coords <- function(showcoords, plot_fp) {
   showcoords %>%
     group_by(ref, query, len_ref, len_query) %>% summarise(total_aln_len_1 = sum(len1), total_aln_len_2 = sum(len2)) %>%
@@ -199,27 +196,16 @@ visualize_coords <- function(showcoords, plot_fp) {
 
 
 
-aligned_sites_from_alns <- function(datadir, species_under_investigation) {
-  #' Generate aligned sties between ref and qry from the whole genome alignments
-  numcer_dir <- file.path(datadir, "5_nucmer")
-
-  ## input files
-  snps_file <- file.path(numcer_dir, paste(species_under_investigation, ".snps", sep=""))
-  coords_file <- file.path(numcer_dir, paste(species_under_investigation, ".coords", sep=""))
-
-  ## output files
-  plot_fp <- file.path(numcer_dir, paste(species_under_investigation, ".heatmap_coords_refqry.pdf", sep=""))
-  aligned_sites_fp <- file.path(numcer_dir, paste(species_under_investigation, "_aligned_sites.tsv", sep=""))
-
-
-   ## 2020-10-29: when two genomes ANI is 100, the showsnps would be empty.
+aligned_sites_from_alns <- function(snps_file, coords_file, repg_file, qryg_file, aligned_sites_fp, plot_fp) {
+  
+  ## 2020-10-29: when two genomes ANI is 100, the showsnps would be empty.
   showsnps <- read_snps(snps_file)
   showcoords <- read_coords(coords_file)
   visualize_coords(showcoords, plot_fp)
 
 
-  refgenome <- read_genome(file.path(datadir, "uhgg_rep.fna"))
-  qrygenome <- read_genome(file.path(datadir, "genome_under_investigation.fna")) %>%
+  refgenome <- read_genome(repg_file)
+  qrygenome <- read_genome(qryg_file) %>%
     set_colnames(c("qryid", "qrypos", "qryallele")) %>% mutate(rc_allele = chartr("ATGC","TACG",qryallele))
 
   ## Let's start
@@ -256,4 +242,57 @@ aligned_sites_from_alns <- function(datadir, species_under_investigation) {
 
 
 
-aligned_sites_from_alns(datadir, species_under_investigation)
+true_sites_from_aligned <- function(aligned_sites_fp) {
+  ## Compute true_sites from aligned_sites
+  
+  aligned_sites <- read_delim(aligned_sites_fp, delim = "\t", col_types = cols())
+  
+  ## ref sites that aligned to more than one qry sites. haven't looked into the reason for this.
+  dupsites <- aligned_sites %>% group_by(refid, pos1) %>% filter(n() > 1) %>% ungroup() %>% select(refid, pos1) %>% unique()
+  
+  ## generate the true positive set
+  true_sites <- aligned_sites %>% left_join(dupsites %>% mutate(isdup = T), by=c("refid", "pos1")) %>% filter(is.na(isdup)) %>% select(-isdup)
+  
+  ## ignore the dupsites for now...
+  dupsites <- left_join(dupsites, aligned_sites, by=c("refid", "pos1")) %>% arrange(refid, pos1)
+  
+  return(true_sites)
+}
+
+
+
+if (length(args) == 6 ) {
+  snps_file <- args[1]
+  coords_file <- args[2]
+  repg_file <- args[3]
+  qryg_file <- args[4]
+  aligned_sites_fp <- args[5]
+  plot_fp <- args[6]
+  
+  aligned_sites_from_alns(snps_file, coords_file, repg_file, qryg_file, aligned_sites_fp, plot_fp)
+} 
+
+
+if (length(args) == 2) {
+  aligned_sites_fp <- args[1]
+  true_sites_fp <- args[2]
+  
+  true_sites <- true_sites_from_aligned(aligned_sites_fp) %>% filter(sitetype != "mism")
+  true_sites %>% write.table(true_sites_fp, sep="\t", quote = F, row.names = F)
+}
+
+
+if (FALSE) {
+  datadir <- args[1]
+  species_under_investigation <- args[2]
+  numcer_dir <- file.path(datadir, "5_nucmer")
+  
+  ## input files
+  snps_file <- file.path(numcer_dir, paste(species_under_investigation, ".snps", sep=""))
+  coords_file <- file.path(numcer_dir, paste(species_under_investigation, ".coords", sep=""))
+  
+  ## output files
+  plot_fp <- file.path(numcer_dir, paste(species_under_investigation, ".heatmap_coords_refqry.pdf", sep=""))
+  aligned_sites_fp <- file.path(numcer_dir, paste(species_under_investigation, "_aligned_sites.tsv", sep=""))
+}
+

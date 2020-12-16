@@ -1,21 +1,6 @@
 # Download UHGG genomes and simulate reads
 
 
-rule _prepare:
-    input:
-        PROJ_DIR + "/sim_rc.tsv"
-
-
-rule _genomes:
-    input:
-        [PROJ_DIR + "/genome_under_investigation.fna", PROJ_DIR + "/uhgg_rep.fna"]
-
-
-rule _reads:
-    input:
-        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq", sim_cov=SIM_COV_LIST)
-
-
 rule download_genome_to_simulate:
     input:
         sim = PROJ_DIR + "/genome_under_investigation",

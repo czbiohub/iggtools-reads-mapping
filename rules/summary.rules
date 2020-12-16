@@ -1,0 +1,71 @@
+
+rule pileup_stats:
+    input:
+        pileup = PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        truesites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+    output:
+        PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "/art_{bt2_combo}_{sim_cov}X.tsv"
+    params:
+        py = LIB_DIR + "/bin/summarize_pileup.py",
+        mad = config["min_allele_depth"]
+    threads:
+        1
+    shell:
+        """
+        python {params.py} --pileup_fp {input.pileup} --truesites_fp {input.truesites} --summary_fp {output} --min_allele_depth {params.mad}
+        """
+
+
+rule merge_stats:
+    input:
+        expand(PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "/art_{bt2_combo}_{sim_cov}X.tsv",
+            sim_cov=SIM_COV_LIST, bt2_combo = BT2_COMBO)
+    output:
+        sites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
+        reads = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary.tsv"
+    params:
+        R = LIB_DIR + "/bin/merge_summary.R",
+        midas= PROJ_DIR + "/4_midas",
+        pstats = PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]),
+    threads:
+        1
+    shell:
+        """
+        Rscript {params.R} {params.midas} {params.pstats} {output.sites} {output.reads} {config[species_id]}
+        """
+
+
+rule pileup_stats_nf:
+    input:
+        pileup = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        truesites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
+    output:
+        PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "_nofilter/art_{bt2_combo}_{sim_cov}X.tsv"
+    params:
+        py = LIB_DIR + "/bin/summarize_pileup.py",
+        mad = config["min_allele_depth"]
+    threads:
+        1
+    shell:
+        """
+        python {params.py} --pileup_fp {input.pileup} --truesites_fp {input.truesites} --summary_fp {output} --min_allele_depth {params.mad}
+        """
+
+
+rule merge_stats_nf:
+    input:
+        expand(PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "_nofilter/art_{bt2_combo}_{sim_cov}X.tsv",
+            sim_cov=SIM_COV_LIST, bt2_combo = BT2_COMBO)
+    output:
+        sites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary_nofilter.tsv",
+        reads = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary_nofilter.tsv"
+    params:
+        R = LIB_DIR + "/bin/merge_summary.R",
+        midas = PROJ_DIR + "/4_midas_nofilter",
+        pstats = PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "_nofilter",
+    threads:
+        1
+    shell:
+        """
+        Rscript {params.R} {params.midas} {params.pstats} {output.sites} {output.reads} {config[species_id]}
+        """

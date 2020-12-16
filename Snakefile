@@ -13,13 +13,13 @@ from math import ceil
 
 
 PROJ_DIR = config["base_dir"] + "/" + str(config["species_id"])
-print(PROJ_DIR)
 LIB_DIR = config["lib_dir"]
 
 with open(PROJ_DIR + "/" + config["bt2_combo_fp"]) as stream:
     BT2_COMBO = [line.rstrip() for line in stream]
 
-SIM_COV_LIST = range(1, int(config["sim_cov"]) + 1)
+SIM_COV_LIST = range(1, int(config["sim_cov"]))
+
 
 RC_DICT = defaultdict(int)
 if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
@@ -29,85 +29,63 @@ if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
             RC_DICT[line[0]] = int(line[1])
 
 
-include: "snps.rules"
-include: "nucmer.rules"
+include: "rules/reads.rules"
+include: "rules/snps.rules"
+include: "rules/nucmer.rules"
+include: "rules/summary.rules"
 
 
-rule _tsv:
+rule _stats:
     input:
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_detection_power.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_presence.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abundance.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abuncorr.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_allelefreq.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary.tsv",
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_summary_nofilter.tsv",
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary_nofilter.tsv",
 
 
-rule _ana:
+rule _dbs:
     input:
-        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_allelefreq_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO)
 
 
-rule _major:
+rule _snps:
     input:
-        expand(PROJ_DIR + "/6_rtemp/" + "maj.wide_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
+        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST),
+        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
 
 
-rule major_pass_one:
+rule _bamaln:
     input:
-        expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{{sim_cov}}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4", bt2_combo=BT2_COMBO),
-        aligned_sites = PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv"
-    output:
-        PROJ_DIR + "/6_rtemp/" + "maj.wide_{sim_cov}X.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/maj.stats_{sim_cov}X.tsv",
-    params:
-        maj_pass_one_R = LIB_DIR + "/maj_pass_one.R",
-    threads:
-        1
-    shell:
-        """
-        Rscript {params.maj_pass_one_R} {PROJ_DIR} {config[species_id]} {input.aligned_sites} {wildcards.sim_cov}
-        """
+        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv", bt2_combo = BT2_COMBO, sim_cov = range(15, 21))
 
 
-rule analysis_pass_one:
+rule _true_sites:
     input:
-        PROJ_DIR + "/6_rtemp/" + "maj.wide_{sim_cov}X.tsv"
-    output:
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_abundance_{sim_cov}X.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_abuncorr_{sim_cov}X.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_presence_{sim_cov}X.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_allelefreq_{sim_cov}X.tsv"
-    params:
-        maj_pass_one_R = LIB_DIR + "/maj_ana_one.R",
-    threads:
-        1
-    shell:
-        """
-        Rscript {params.maj_pass_one_R} {PROJ_DIR} {config[species_id]} {wildcards.sim_cov}
-        """
+        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
 
 
-
-rule major_pass_two:
+rule _sites:
     input:
-        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_abundance_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST),
-        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_allelefreq_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST),
-        expand(PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/sites_presence_{sim_cov}X.tsv", sim_cov=SIM_COV_LIST)
-    output:
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_detection_power.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_presence.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abundance.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_abuncorr.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_sites_allelefreq.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_reads_summary.tsv",
-        PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv",
-    params:
-        gen_major_R = LIB_DIR + "/maj_pass_two.R",
-    threads:
-        1
-    shell:
-        """
-        Rscript {params.gen_major_R} {PROJ_DIR} {config[species_id]}
-        """
+        PROJ_DIR + "/5_nucmer/" + str(config["species_id"]) + "_aligned_sites.tsv"
+
+
+rule _aligns:
+    input:
+        PROJ_DIR + "/5_nucmer/DONE-show-aligns"
+
+
+rule _prepare:
+    input:
+        PROJ_DIR + "/sim_rc.tsv"
+
+
+rule _genomes:
+    input:
+        [PROJ_DIR + "/genome_under_investigation.fna", PROJ_DIR + "/uhgg_rep.fna"]
+
+
+rule _reads:
+    input:
+        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq", sim_cov=SIM_COV_LIST)

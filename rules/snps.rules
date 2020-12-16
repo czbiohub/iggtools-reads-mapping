@@ -3,22 +3,6 @@ import pysam
 import numpy as np
 
 
-rule _dbs:
-    input:
-        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO)
-
-
-rule _snps:
-    input:
-        expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
-            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)
-
-
-rule _bamaln:
-    input:
-        expand(PROJ_DIR + "/6_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv", bt2_combo = BT2_COMBO, sim_cov = range(10, 21))
-
-
 rule build_bowtie2_dbs:
     input:
         PROJ_DIR + "/4_midas/{bt2_combo}/db/genomes.tsv"
@@ -52,7 +36,7 @@ rule run_snps:
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas/{bt2_combo}/out",
     threads:
-        config["threads"]
+        4
     shell:
         """
         python -m iggtools midas_run_snps --sample {params.sample_name} \
@@ -64,7 +48,7 @@ rule run_snps:
         """
 
 
-rule run_snps_nofile:
+rule run_snps_nofilter:
     input:
         species = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
         r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq",
@@ -76,7 +60,7 @@ rule run_snps_nofile:
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out",
     threads:
-        config["threads"]
+        4
     shell:
         """
         python -m iggtools midas_run_snps --sample {params.sample_name} \
