@@ -31,6 +31,8 @@ if os.path.exists(PROJ_DIR + "/sim_rc.tsv"):
 
 include: "rules/reads.rules"
 include: "rules/snps.rules"
+include: "rules/genes.rules"
+#include: "rules/merge.rules"
 include: "rules/nucmer.rules"
 include: "rules/summary.rules"
 
@@ -45,15 +47,29 @@ rule _stats:
 
 rule _dbs:
     input:
-        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO)
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species", bt2_combo = BT2_COMBO),
+        expand(PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.species", bt2_combo = BT2_COMBO),
 
 
 rule _snps:
     input:
-        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv",
             bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST),
-        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv",
             bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
+
+
+rule _new_genes:
+        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
+
+
+rule _genes:
+    input:
+        [expand(PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv",
+            bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
+        #expand(PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv",
+        #    bt2_combo = BT2_COMBO, sim_cov = SIM_COV_LIST)]
 
 
 rule _bamaln:
@@ -88,4 +104,4 @@ rule _genomes:
 
 rule _reads:
     input:
-        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq", sim_cov=SIM_COV_LIST)
+        expand(PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq.gz", sim_cov=SIM_COV_LIST)

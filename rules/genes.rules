@@ -1,14 +1,14 @@
-# Build Bowtie2 indexes and run MIDAS snps flow
+# Build Bowtie2 indexes and run MIDAS genes flow
 import pysam
 import numpy as np
 
 
-rule build_bowtie2_dbs:
+rule build_bowtie2_dbs_pan:
     input:
         PROJ_DIR + "/4_midas/{bt2_combo}/db/genomes.tsv"
     output:
-        PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
-        PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.1.bt2",
+        idx = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.species",
+        db2 = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.1.bt2",
     params:
         species_ids = PROJ_DIR + "/4_midas/{bt2_combo}/db/species_ids",
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db"
@@ -20,71 +20,72 @@ rule build_bowtie2_dbs:
 
         python -m iggtools build_bowtie2_indexes \
             --midas_db {params.midas_db_dir} --num_cores {threads} \
-            --bt2_indexes_name repgenomes --species_list {params.species_ids} \
+            --bt2_indexes_name pangenomes --species_list {params.species_ids} \
             --bt2_indexes_dir {params.midas_db_dir}
         """
 
 
-rule run_snps:
+rule run_genes:
     input:
-        species = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
-        db2 = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.1.bt2",
+        species = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.species",
+        db2 = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.1.bt2",
         r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq.gz",
         r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq.gz"
     output:
-        PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv"
+        PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv",
+        PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/genes_summary.tsv",
     params:
         sample_name = "art_{bt2_combo}_{sim_cov}X",
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas/{bt2_combo}/out",
     threads:
-        4
+        2
     shell:
         """
-        python -m iggtools midas_run_snps --sample {params.sample_name} \
+        python -m iggtools midas_run_genes --sample {params.sample_name} \
             -1 {input.r1} -2 {input.r2} --midas_db {params.midas_db_dir} \
-            --prebuilt_bowtie2_indexes {params.midas_db_dir}/repgenomes \
+            --prebuilt_bowtie2_indexes {params.midas_db_dir}/pangenomes \
             --prebuilt_bowtie2_species {input.species} \
             --marker_depth=-1 --num_cores {threads} \
             {params.midas_out_dir}
         """
 
 
-rule run_snps_nofilter:
+rule run_genes_nofilter:
     input:
-        species = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.species",
-        db2 = PROJ_DIR + "/4_midas/{bt2_combo}/db/repgenomes.1.bt2",
+        species = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.species",
+        db2 = PROJ_DIR + "/4_midas/{bt2_combo}/db/pangenomes.1.bt2",
         r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq.gz",
         r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq.gz"
     output:
-        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv"
+        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv"
     params:
         sample_name = "art_{bt2_combo}_{sim_cov}X",
         midas_db_dir = PROJ_DIR + "/4_midas/{bt2_combo}/db",
         midas_out_dir = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out",
     threads:
-        4
+        2
     shell:
         """
-        python -m iggtools midas_run_snps --sample {params.sample_name} \
+        python -m iggtools midas_run_genes --sample {params.sample_name} \
             -1 {input.r1} -2 {input.r2} --midas_db {params.midas_db_dir} \
-            --prebuilt_bowtie2_indexes {params.midas_db_dir}/repgenomes \
+            --prebuilt_bowtie2_indexes {params.midas_db_dir}/pangenomes \
             --prebuilt_bowtie2_species {input.species} \
             --marker_depth=-1 --num_cores {threads} \
-            --aln_mapid 0.0 --aln_mapq 0 --aln_readq 0 --aln_cov 0.0 --aln_baseq 0 \
+            --aln_mapid 0.0 --aln_mapq 0 --aln_readq 0 --aln_cov 0.0 \
             {params.midas_out_dir}
         """
 
 
-rule balmaln_tsv:
+rule balmaln_tsv_genes:
     input:
-        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv"
+        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/genes/" + str(config["species_id"]) + ".genes.tsv"
     output:
         PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "/{bt2_combo}/bamalns_{sim_cov}X.tsv"
     threads:
         1
     params:
-        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/temp/snps/repgenomes.bam",
+        PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/temp/genes/pangenomes.bam",
     run:
         outfile = output[0]
         bamfile = params[0]

@@ -202,6 +202,7 @@ aligned_sites_from_alns <- function(snps_file, coords_file, repg_file, qryg_file
   showsnps <- read_snps(snps_file)
   showcoords <- read_coords(coords_file)
   visualize_coords(showcoords, plot_fp)
+  numcer_dir <- dirname(snps_file)
 
 
   refgenome <- read_genome(repg_file)

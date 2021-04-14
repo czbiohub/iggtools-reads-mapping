@@ -77,12 +77,13 @@ rule downsample_reads:
         r2 = PROJ_DIR + "/2_trimmomatic/cov_" + config["sim_cov"] + "_paired_2.fastq",
         rc = PROJ_DIR + "/sim_rc.tsv"
     output:
-        r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq",
-        r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq",
+        r1 = PROJ_DIR + "/3_reads/cov_{sim_cov}_1.fastq.gz",
+        r2 = PROJ_DIR + "/3_reads/cov_{sim_cov}_2.fastq.gz",
     params:
-        rc = lambda wildcards: RC_DICT[wildcards.sim_cov]
+        rc = lambda wildcards: RC_DICT[wildcards.sim_cov],
+
     shell:
         """
-        seqtk sample -s100 {input.r1} {params.rc} > {output.r1}
-        seqtk sample -s100 {input.r2} {params.rc} > {output.r2}
+        seqtk sample -s100 {input.r1} {params.rc} | gzip -c > {output.r1}
+        seqtk sample -s100 {input.r2} {params.rc} | gzip -c > {output.r2}
         """

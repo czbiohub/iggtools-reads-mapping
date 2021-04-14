@@ -17,7 +17,7 @@ o_reads_summary_fp <- args[4]
 species_under_investigation <- args[5]
 
 
-bt2_levels <- data.frame(bt2_db = list.files(midas_dir)) %>%
+bt2_levels <- data.frame(bt2_db = list.files(midas_dir, "^ani.*")) %>%
   separate(bt2_db, sep="\\.", into = c("_", "bt2_ani"), remove = F) %>% mutate(bt2_ani = as.numeric(bt2_ani)) %>%
   mutate(bt2_db = as.factor(bt2_db)) %>% mutate(bt2_db = fct_reorder(bt2_db, bt2_ani, .desc=TRUE)) %>% .$bt2_db %>% levels()
 

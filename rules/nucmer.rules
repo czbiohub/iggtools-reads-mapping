@@ -72,7 +72,7 @@ rule generate_aligned_sites:
         2
     shell:
         """
-        Rscript {params.R} {input.snp} {input.coords} {input.repgenome} {input.qrygenome} {output.sites} {output.pdf}
+        Rscript {params.R} {input.snps} {input.coords} {input.repgenome} {input.qrygenome} {output.sites} {output.pdf}
         """
 
 

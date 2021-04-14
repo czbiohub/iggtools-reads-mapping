@@ -1,7 +1,7 @@
 
 rule pileup_stats:
     input:
-        pileup = PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        pileup = PROJ_DIR + "/4_midas/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv",
         truesites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
     output:
         PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "/art_{bt2_combo}_{sim_cov}X.tsv"
@@ -37,7 +37,7 @@ rule merge_stats:
 
 rule pileup_stats_nf:
     input:
-        pileup = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv.lz4",
+        pileup = PROJ_DIR + "/4_midas_nofilter/{bt2_combo}/out/art_{bt2_combo}_{sim_cov}X/snps/" + str(config["species_id"]) + ".snps.tsv",
         truesites = PROJ_DIR + "/7_rdata/" + str(config["species_id"]) + "_true_sites.tsv"
     output:
         PROJ_DIR + "/6_rtemp/pileup_stats_mad." + str(config["min_allele_depth"]) + "_nofilter/art_{bt2_combo}_{sim_cov}X.tsv"

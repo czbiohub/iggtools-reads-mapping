@@ -1,0 +1,36 @@
+# Build Bowtie2 indexes and run MIDAS genes flow
+import pysam
+import numpy as np
+
+
+rule _list:
+    input:
+        expand(f"{PROJ_DIR}/4_midas/{{bt2_combo}}/merge/samples_list.tsv", bt2_combo = BT2_COMBO)
+
+
+rule prepare_sample_list:
+    input:
+        expand(f"{PROJ_DIR}/4_midas/{{bt2_combo}}/out/art_{{bt2_combo}}_{{sim_cov}}X/genes/genes_summary.tsv", sim_cov=SIM_COV_LIST, allow_missing=True)
+    output:
+        samples_list = f"{PROJ_DIR}/4_midas/{{bt2_combo}}/merge/samples_list.tsv"
+    params:
+        midas_outdir = f"{PROJ_DIR}/4_midas/{{bt2_combo}}/out",
+    run:
+        print(output)
+        print(params)
+
+
+rule merge_genes_xs_cov:
+    input:
+        "/4_midas/{bt2_combo}/merge/samples_list.tsv",
+    output:
+        PROJ_DIR + "/4_midas/{bt2_combo}/merge/genes/genes_summary.tsv",
+    params:
+      outdir = PROJ_DIR + "/4_midas/{bt2_combo}/merge",
+      midasdb = PROJ_DIR + "/4_midas/{bt2_combo}/merge/db"
+    shell:
+        """
+        python -m iggtools midas_merge_genes \
+            --samples_list {input[0]} --midas_db {params.midasdb} \
+            --genome_depth 1.0 {params.outdir}
+        """
